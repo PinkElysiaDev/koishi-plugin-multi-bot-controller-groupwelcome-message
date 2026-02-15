@@ -73,6 +73,12 @@ export const createBotConfigSchema = () => {
       botId: Schema.dynamic(SCHEMA_KEY_BOT_ID)
         .description('**Bot ID**<br>从 multi-bot-controller 已配置的 Bot 中选择')
         .required(),
+      delayMode: Schema.union([
+        Schema.const('sliding' as const).description('滑动窗口 - 每个新事件重置定时器，最大化合并效果'),
+        Schema.const('fixed' as const).description('固定窗口 - 第一个事件触发后不再重置，延迟时间可预测'),
+      ])
+        .description('延迟模式')
+        .default('sliding'),
     }),
 
     // 入群消息配置

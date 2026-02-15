@@ -20,7 +20,10 @@ export const usage = `
 ### 配置方法
 
 1. 在插件配置中选择要使用的 Bot
-2. 为每个 Bot 配置入群欢迎消息和退群消息：
+2. 选择**延迟模式**：
+   - **滑动窗口**：每个新事件重置定时器，最大化合并效果（默认）
+   - **固定窗口**：第一个事件触发后不再重置，延迟时间可预测
+3. 为每个 Bot 配置入群欢迎消息和退群消息：
    - **群组/频道 ID**：目标群组 ID
    - **入群欢迎消息**：支持变量 {user} {id} {at} {avatar} {group} {group_id} {group_count} {time} {hitokoto}
    - **延迟发送时间**：0 表示立即发送，大于 0 表示等待该秒数后合并多条消息一起发送
@@ -44,6 +47,10 @@ export const usage = `
 - 用户名、ID、@、头像会全部列出
 - 群人数取最新值
 - 时间取最后事件的时间
+
+**延迟模式对比（延迟 5 秒）：**
+- 滑动窗口：0s、2s、4s 各有一人加入 → 9s 发送合并消息（每次重置定时器）
+- 固定窗口：0s、2s、4s 各有一人加入 → 5s 发送合并消息（第一次触发后不重置）
 `
 
 // 声明 Koishi 类型扩展
@@ -340,13 +347,18 @@ export function apply(ctx: Context, config: Config) {
       const existing = delayManager.welcome.get(session.guildId)
 
       if (existing) {
-        // 已有待发送队列，取消之前的定时器，将新事件加入队列
-        clearTimeout(existing.timer)
+        // 已有待发送队列，将新事件加入队列
         existing.events.push(eventData)
         debugLog(`[${botId}] Added to existing delay queue, now ${existing.events.length} events`)
 
-        // 重新设置定时器
-        existing.timer = setTimeout(() => processDelayedWelcome(session.guildId), groupConfig.delaySeconds * 1000)
+        // 根据延迟模式决定是否重置定时器
+        if (botConfig.delayMode === 'sliding') {
+          // 滑动窗口：取消旧定时器，重新开始计时
+          clearTimeout(existing.timer)
+          existing.timer = setTimeout(() => processDelayedWelcome(session.guildId), groupConfig.delaySeconds * 1000)
+          debugLog(`[${botId}] Sliding mode: timer reset`)
+        }
+        // fixed 模式：不重置定时器，保持原有的发送时间
       } else {
         // 创建新的延迟队列
         const timer = setTimeout(() => processDelayedWelcome(session.guildId), groupConfig.delaySeconds * 1000)
@@ -420,13 +432,18 @@ export function apply(ctx: Context, config: Config) {
       const existing = delayManager.leave.get(session.guildId)
 
       if (existing) {
-        // 已有待发送队列，取消之前的定时器，将新事件加入队列
-        clearTimeout(existing.timer)
+        // 已有待发送队列，将新事件加入队列
         existing.events.push(eventData)
         debugLog(`[${botId}] Added to existing delay queue, now ${existing.events.length} events`)
 
-        // 重新设置定时器
-        existing.timer = setTimeout(() => processDelayedLeave(session.guildId), groupConfig.delaySeconds * 1000)
+        // 根据延迟模式决定是否重置定时器
+        if (botConfig.delayMode === 'sliding') {
+          // 滑动窗口：取消旧定时器，重新开始计时
+          clearTimeout(existing.timer)
+          existing.timer = setTimeout(() => processDelayedLeave(session.guildId), groupConfig.delaySeconds * 1000)
+          debugLog(`[${botId}] Sliding mode: timer reset`)
+        }
+        // fixed 模式：不重置定时器，保持原有的发送时间
       } else {
         // 创建新的延迟队列
         const timer = setTimeout(() => processDelayedLeave(session.guildId), groupConfig.delaySeconds * 1000)

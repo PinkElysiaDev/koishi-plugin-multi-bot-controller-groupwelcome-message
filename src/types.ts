@@ -1,5 +1,8 @@
 // src/types.ts
 
+/** 延迟模式 */
+export type DelayMode = 'sliding' | 'fixed'
+
 /** 欢迎消息配置 */
 export interface WelcomeMessageConfig {
   guildId: string        // 群组/频道 ID
@@ -17,6 +20,7 @@ export interface LeaveMessageConfig {
 /** 单个 Bot 的配置 */
 export interface BotConfig {
   botId: string                          // Bot ID (platform:selfId)
+  delayMode: DelayMode                   // 延迟模式：sliding（滑动窗口）或 fixed（固定窗口）
   welcomeMessages: WelcomeMessageConfig[]   // 欢迎消息列表 (table 展示)
   leaveMessages: LeaveMessageConfig[]      // 离开消息列表 (table 展示)
 }
