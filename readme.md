@@ -42,7 +42,7 @@ npm install koishi-plugin-multi-bot-controller-groupwelcome-message
 
 | 变量 | 说明 | 示例 |
 |------|------|------|
-| {user} | 用户昵称 | 张三 |
+| {user} | 用户昵称（退群消息中若同时存在{id}则此项被忽略） | 张三 |
 | {id} | 用户 ID | 123456789 |
 | {at} | @该用户 | @123456789 |
 | {avatar} | 用户头像 | ![avatar](url) |
@@ -51,6 +51,8 @@ npm install koishi-plugin-multi-bot-controller-groupwelcome-message
 | {group_count} | 群组人数 | 100 |
 | {time} | 当前时间 | 2026/02/14 20:00:00 |
 | {hitokoto} | 一言 | 这一生，我仅为我自己而活。 |
+
+**注意**：由于 OneBot 协议限制，退群事件不包含用户昵称信息。因此退群消息建议使用 `{id}` 而非 `{user}`。若消息中同时包含 `{user}` 和 `{id}`，插件会自动忽略 `{user}` 变量。
 
 ## 延迟合并发送
 

@@ -107,7 +107,7 @@ export async function formatMessage(
  * 批量格式化消息，用于延迟合并发送
  *
  * 变量处理规则：
- * - {user}: 合并所有用户名，用顿号分隔
+ * - {user}: 合并所有用户名，用顿号分隔（退群事件中若同时存在{id}则忽略此项）
  * - {id}: 合并所有用户ID，用顿号分隔
  * - {at}: 合并所有 @ 元素
  * - {avatar}: 合并所有用户头像（换行分隔）
@@ -121,13 +121,14 @@ export async function formatMessage(
  * @param session 最后一个事件的 session（用于获取 bot 和群组信息）
  * @param markdownText 消息模板
  * @param events 事件列表（入群或退群）
- * @param eventType 事件类型 'welcome' | 'leave'
+ * @param isLeaveEvent 是否为退群事件
  */
 export async function formatBatchMessage(
   ctx: Context,
   session: Session,
   markdownText: string,
   events: (WelcomeEventData | LeaveEventData)[],
+  isLeaveEvent: boolean,
 ): Promise<h[]> {
   const guildId = session.event.guild?.id ?? session.guildId
   const lastEvent = events[events.length - 1]
@@ -171,9 +172,15 @@ export async function formatBatchMessage(
   // 获取一言（只获取一次）
   const hitokotoText = await hitokoto(ctx)
 
+  // 检查消息中是否同时包含 {user} 和 {id}
+  const hasUser = markdownText.includes('{user}')
+  const hasId = markdownText.includes('{id}')
+  // 退群事件中，若同时存在 {user} 和 {id}，则忽略 {user}（因为退群时无法获取用户昵称）
+  const shouldIgnoreUser = isLeaveEvent && hasUser && hasId
+
   // 替换变量
   markdownText = markdownText
-    .replace(/{user}/g, userNames)
+    .replace(/{user}/g, shouldIgnoreUser ? '' : userNames)
     .replace(/{id}/g, userIds)
     .replace(/{group}/g, groupName)
     .replace(/{time}/g, time)

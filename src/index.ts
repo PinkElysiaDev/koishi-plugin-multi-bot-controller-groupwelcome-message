@@ -41,6 +41,8 @@ export const usage = `
 - {time} - 当前时间
 - {hitokoto} - 一言
 
+**退群消息特殊说明**：由于 OneBot 协议限制，退群事件不包含用户昵称。若消息中同时包含 \`{user}\` 和 \`{id}\`，插件会自动忽略 \`{user}\` 变量（避免显示为用户ID）。建议退群消息只使用 \`{id}\`。
+
 ### 延迟合并发送
 
 设置延迟时间后，短时间内的多条入群/退群事件会合并为一条消息发送：
@@ -61,9 +63,9 @@ declare module 'koishi' {
   }
 }
 
-// 延迟发送管理器 - 按群组 ID 管理待发送的事件
+// 延迟发送管理器 - 按 botId:guildId 复合 key 管理待发送的事件
 interface DelayManager {
-  // key: guildId, value: { events: WelcomeEventData[]; timer: NodeJS.Timeout; groupConfig: WelcomeMessageConfig; botId: string }
+  // key: botId:guildId, value: { events: WelcomeEventData[]; timer: NodeJS.Timeout; groupConfig: WelcomeMessageConfig; botId: string }
   welcome: Map<string, {
     events: WelcomeEventData[]
     timer: NodeJS.Timeout
@@ -71,7 +73,7 @@ interface DelayManager {
     botId: string
     session: any
   }>
-  // key: guildId, value: { events: LeaveEventData[]; timer: NodeJS.Timeout; groupConfig: LeaveMessageConfig; botId: string }
+  // key: botId:guildId, value: { events: LeaveEventData[]; timer: NodeJS.Timeout; groupConfig: LeaveMessageConfig; botId: string }
   leave: Map<string, {
     events: LeaveEventData[]
     timer: NodeJS.Timeout
@@ -154,7 +156,8 @@ export function apply(ctx: Context, config: Config) {
     if (name === userId) {
       try {
         const member = await session.bot.getGuildMember(session.guildId, userId)
-        return member?.nick || member?.name || userId
+        // 优先使用群名片，其次是用户昵称（member.user?.name）
+        return member?.nick || member?.user?.name || userId
       } catch {
         return userId
       }
@@ -171,17 +174,25 @@ export function apply(ctx: Context, config: Config) {
   }
 
   /**
+   * 生成延迟管理器的复合 key，确保每个 bot 的队列独立
+   */
+  const getDelayKey = (botId: string, guildId: string): string => {
+    return `${botId}:${guildId}`
+  }
+
+  /**
    * 处理延迟的欢迎消息发送
    */
-  const processDelayedWelcome = async (guildId: string) => {
-    const pending = delayManager.welcome.get(guildId)
+  const processDelayedWelcome = async (botId: string, guildId: string) => {
+    const key = getDelayKey(botId, guildId)
+    const pending = delayManager.welcome.get(key)
     if (!pending) return
 
     // 清除定时器并从 Map 中移除
     clearTimeout(pending.timer)
-    delayManager.welcome.delete(guildId)
+    delayManager.welcome.delete(key)
 
-    const { events, groupConfig, botId, session } = pending
+    const { events, groupConfig, session } = pending
 
     if (events.length === 0) return
 
@@ -195,7 +206,7 @@ export function apply(ctx: Context, config: Config) {
       } else {
         // 多个事件，使用批量消息格式化
         verboseLog(`[${botId}] Sending batch welcome message for guild ${guildId}, ${events.length} users`)
-        message = await formatBatchMessage(ctx, session, groupConfig.message, events)
+        message = await formatBatchMessage(ctx, session, groupConfig.message, events, false)
       }
 
       await sendMessage(session, message)
@@ -209,15 +220,16 @@ export function apply(ctx: Context, config: Config) {
   /**
    * 处理延迟的离开消息发送
    */
-  const processDelayedLeave = async (guildId: string) => {
-    const pending = delayManager.leave.get(guildId)
+  const processDelayedLeave = async (botId: string, guildId: string) => {
+    const key = getDelayKey(botId, guildId)
+    const pending = delayManager.leave.get(key)
     if (!pending) return
 
     // 清除定时器并从 Map 中移除
     clearTimeout(pending.timer)
-    delayManager.leave.delete(guildId)
+    delayManager.leave.delete(key)
 
-    const { events, groupConfig, botId, session } = pending
+    const { events, groupConfig, session } = pending
 
     if (events.length === 0) return
 
@@ -231,7 +243,7 @@ export function apply(ctx: Context, config: Config) {
       } else {
         // 多个事件，使用批量消息格式化
         verboseLog(`[${botId}] Sending batch leave message for guild ${guildId}, ${events.length} users`)
-        message = await formatBatchMessage(ctx, session, groupConfig.message, events)
+        message = await formatBatchMessage(ctx, session, groupConfig.message, events, true)
       }
 
       await sendMessage(session, message)
@@ -343,8 +355,11 @@ export function apply(ctx: Context, config: Config) {
     if (groupConfig.delaySeconds > 0) {
       verboseLog(`[${botId}] Delay enabled for guild ${session.guildId}, waiting ${groupConfig.delaySeconds}s`)
 
+      // 使用复合 key 确保每个 bot 的队列独立
+      const key = getDelayKey(botId, session.guildId)
+
       // 检查是否已有待发送的队列
-      const existing = delayManager.welcome.get(session.guildId)
+      const existing = delayManager.welcome.get(key)
 
       if (existing) {
         // 已有待发送队列，将新事件加入队列
@@ -355,14 +370,14 @@ export function apply(ctx: Context, config: Config) {
         if (botConfig.delayMode === 'sliding') {
           // 滑动窗口：取消旧定时器，重新开始计时
           clearTimeout(existing.timer)
-          existing.timer = setTimeout(() => processDelayedWelcome(session.guildId), groupConfig.delaySeconds * 1000)
+          existing.timer = setTimeout(() => processDelayedWelcome(botId, session.guildId), groupConfig.delaySeconds * 1000)
           debugLog(`[${botId}] Sliding mode: timer reset`)
         }
         // fixed 模式：不重置定时器，保持原有的发送时间
       } else {
         // 创建新的延迟队列
-        const timer = setTimeout(() => processDelayedWelcome(session.guildId), groupConfig.delaySeconds * 1000)
-        delayManager.welcome.set(session.guildId, {
+        const timer = setTimeout(() => processDelayedWelcome(botId, session.guildId), groupConfig.delaySeconds * 1000)
+        delayManager.welcome.set(key, {
           events: [eventData],
           timer,
           groupConfig,
@@ -428,8 +443,11 @@ export function apply(ctx: Context, config: Config) {
     if (groupConfig.delaySeconds > 0) {
       verboseLog(`[${botId}] Delay enabled for guild ${session.guildId}, waiting ${groupConfig.delaySeconds}s`)
 
+      // 使用复合 key 确保每个 bot 的队列独立
+      const key = getDelayKey(botId, session.guildId)
+
       // 检查是否已有待发送的队列
-      const existing = delayManager.leave.get(session.guildId)
+      const existing = delayManager.leave.get(key)
 
       if (existing) {
         // 已有待发送队列，将新事件加入队列
@@ -440,14 +458,14 @@ export function apply(ctx: Context, config: Config) {
         if (botConfig.delayMode === 'sliding') {
           // 滑动窗口：取消旧定时器，重新开始计时
           clearTimeout(existing.timer)
-          existing.timer = setTimeout(() => processDelayedLeave(session.guildId), groupConfig.delaySeconds * 1000)
+          existing.timer = setTimeout(() => processDelayedLeave(botId, session.guildId), groupConfig.delaySeconds * 1000)
           debugLog(`[${botId}] Sliding mode: timer reset`)
         }
         // fixed 模式：不重置定时器，保持原有的发送时间
       } else {
         // 创建新的延迟队列
-        const timer = setTimeout(() => processDelayedLeave(session.guildId), groupConfig.delaySeconds * 1000)
-        delayManager.leave.set(session.guildId, {
+        const timer = setTimeout(() => processDelayedLeave(botId, session.guildId), groupConfig.delaySeconds * 1000)
+        delayManager.leave.set(key, {
           events: [eventData],
           timer,
           groupConfig,
