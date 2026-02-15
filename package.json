@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-multi-bot-controller-groupwelcome-message",
-  "description": "\u0016\u0016\u0016\u0016\u0016\u0016\u0016\u0016\u0016111",
-  "version": "0.0.1",
+  "description": "Multi-bot group welcome/leave message controller - manages group welcome and leave messages for multiple bots with per-group configuration support",
+  "version": "0.1.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,14 +9,36 @@
     "dist"
   ],
   "license": "MIT",
-  "scripts": {},
+  "author": "xiaolan20020118 <xiaolan20020118@gmail.com>",
+  "homepage": "https://github.com/xiaolan20020118-create/koishi-plugin-multi-bot-controller-groupwelcome-message#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiaolan20020118-create/koishi-plugin-multi-bot-controller-groupwelcome-message.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xiaolan20020118-create/koishi-plugin-multi-bot-controller-groupwelcome-message/issues"
+  },
   "keywords": [
+    "bot",
     "chatbot",
     "koishi",
-    "plugin"
+    "plugin",
+    "multi-bot",
+    "welcome-message",
+    "group-message",
+    "group-welcome",
+    "delayed-message"
   ],
-  "devDependencies": {},
   "peerDependencies": {
-    "koishi": "^4.18.7"
+    "koishi": "^4.18.7",
+    "koishi-plugin-multi-bot-controller": "^1.0.6"
+  },
+  "dependencies": {
+    "koishi-plugin-markdown": "^1.1.1"
+  },
+  "koishi": {
+    "description": {
+      "zh": "多 Bot 群组欢迎/退群消息控制器 - 为多个 Bot 管理群组欢迎和退群消息，支持按群组配置不同消息"
+    }
   }
 }
