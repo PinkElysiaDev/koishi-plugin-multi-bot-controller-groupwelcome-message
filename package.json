@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-multi-bot-controller-groupwelcome-message",
   "description": "Multi-bot group welcome/leave message controller - manages group welcome and leave messages for multiple bots with per-group configuration support",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -10,13 +10,13 @@
   ],
   "license": "MIT",
   "author": "xiaolan20020118 <xiaolan20020118@gmail.com>",
-  "homepage": "https://github.com/xiaolan20020118-create/koishi-plugin-multi-bot-controller-groupwelcome-message#readme",
+  "homepage": "https://github.com/PinkElysiaDev/koishi-plugin-multi-bot-controller-groupwelcome-message#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xiaolan20020118-create/koishi-plugin-multi-bot-controller-groupwelcome-message.git"
+    "url": "https://github.com/PinkElysiaDev/koishi-plugin-multi-bot-controller-groupwelcome-message.git"
   },
   "bugs": {
-    "url": "https://github.com/xiaolan20020118-create/koishi-plugin-multi-bot-controller-groupwelcome-message/issues"
+    "url": "https://github.com/PinkElysiaDev/koishi-plugin-multi-bot-controller-groupwelcome-message/issues"
   },
   "keywords": [
     "bot",
