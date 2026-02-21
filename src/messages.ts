@@ -79,6 +79,10 @@ export async function formatMessage(
       ? `https://q.qlogo.cn/headimg_dl?dst_uin=${userId}&spec=640`
       : session.author.avatar
 
+  // 检查是否需要获取一言
+  const hasHitokoto = markdownText.includes('{hitokoto}')
+  const hitokotoText = hasHitokoto ? await hitokoto(ctx) : ''
+
   // 替换变量
   markdownText = markdownText
     .replace(/{user}/g, userName)
@@ -88,7 +92,7 @@ export async function formatMessage(
     .replace(/{id}/g, userId ?? '')
     .replace(/{group_id}/g, guildId ?? '')
     .replace(/{group_count}/g, groupMemberCount.toString())
-    .replace(/{hitokoto}/g, await hitokoto(ctx))
+    .replace(/{hitokoto}/g, hitokotoText)
 
   // 使用 koishi-plugin-markdown 转换
   const transformed = transform(markdownText)
@@ -169,14 +173,15 @@ export async function formatBatchMessage(
     .filter(a => a)
     .join('\n')
 
-  // 获取一言（只获取一次）
-  const hitokotoText = await hitokoto(ctx)
-
-  // 检查消息中是否同时包含 {user} 和 {id}
+  // 检查消息中是否包含需要特殊处理的变量
   const hasUser = markdownText.includes('{user}')
   const hasId = markdownText.includes('{id}')
+  const hasHitokoto = markdownText.includes('{hitokoto}')
   // 退群事件中，若同时存在 {user} 和 {id}，则忽略 {user}（因为退群时无法获取用户昵称）
   const shouldIgnoreUser = isLeaveEvent && hasUser && hasId
+
+  // 获取一言（只获取一次，且仅在需要时）
+  const hitokotoText = hasHitokoto ? await hitokoto(ctx) : ''
 
   // 替换变量
   markdownText = markdownText
@@ -320,15 +325,17 @@ function getNotEmptyText(defaultName: string, ...texts: string[]) {
 /**
  * 获取一言
  */
-async function hitokoto(ctx: Context) {
+async function hitokoto(ctx: Context): Promise<string> {
   for (let i = 0; i < 3; i++) {
     try {
       const response = await ctx.http.get('https://v1.hitokoto.cn')
       return response.hitokoto
     } catch (e) {
       if (i === 2) {
-        throw e
+        // 失败时返回空字符串，不抛出错误
+        return ''
       }
     }
   }
+  return ''
 }
