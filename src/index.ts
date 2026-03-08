@@ -25,7 +25,7 @@ export const usage = `
    - **固定窗口**：第一个事件触发后不再重置，延迟时间可预测
 3. 为每个 Bot 配置入群欢迎消息和退群消息：
    - **群组/频道 ID**：目标群组 ID
-   - **入群欢迎消息**：支持变量 {user} {id} {at} {avatar} {group} {group_id} {group_count} {time} {hitokoto}
+   - **入群欢迎消息**：支持变量 {user} {id} {at} {avatar} {group} {group_id} {group_count} {time} {hitokoto} {br}
    - **延迟发送时间**：0 表示立即发送，大于 0 表示等待该秒数后合并多条消息一起发送
    - **退群提醒消息**：同上
 
@@ -39,7 +39,8 @@ export const usage = `
 - {group_id} - 群组 ID
 - {group_count} - 群组人数
 - {time} - 当前时间
-- {hitokoto} - 一言
+ - {hitokoto} - 一言
+ - {br} - 换行
 
 **退群消息特殊说明**：由于 OneBot 协议限制，退群事件不包含用户昵称。若消息中同时包含 \`{user}\` 和 \`{id}\`，插件会自动忽略 \`{user}\` 变量（避免显示为用户ID）。建议退群消息只使用 \`{id}\`。
 

@@ -15,6 +15,7 @@ import type { WelcomeEventData, LeaveEventData } from './types'
  * - {avatar}: 用户头像
  * - {group_count}: 群组人数
  * - {hitokoto}: 一言
+ * - {br}: 换行符
  */
 export async function formatMessage(
   ctx: Context,
@@ -93,6 +94,7 @@ export async function formatMessage(
     .replace(/{group_id}/g, guildId ?? '')
     .replace(/{group_count}/g, groupMemberCount.toString())
     .replace(/{hitokoto}/g, hitokotoText)
+    .replace(/{br}/g, '\n')
 
   // 使用 koishi-plugin-markdown 转换
   const transformed = transform(markdownText)
@@ -120,6 +122,7 @@ export async function formatMessage(
  * - {group}: 获取群组名称
  * - {group_id}: 群组ID
  * - {hitokoto}: 只获取一次
+ * - {br}: 换行符
  *
  * @param ctx Context
  * @param session 最后一个事件的 session（用于获取 bot 和群组信息）
@@ -193,6 +196,7 @@ export async function formatBatchMessage(
     .replace(/{group_id}/g, guildId ?? '')
     .replace(/{group_count}/g, groupMemberCount.toString())
     .replace(/{hitokoto}/g, hitokotoText)
+    .replace(/{br}/g, '\n')
 
   // 使用 koishi-plugin-markdown 转换
   const transformed = transform(markdownText)
