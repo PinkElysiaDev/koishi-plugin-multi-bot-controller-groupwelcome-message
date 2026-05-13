@@ -116,6 +116,14 @@ export const createConfig = (ctx: Context) => {
         .description('显示详细日志（关闭后只输出关键信息）')
         .default(false),
     }).description('日志设置'),
+
+    Schema.object({
+      resource: Schema.object({
+        allowLocalResources: Schema.boolean()
+          .description('允许加载本地文件/图片资源（file:// 或本地路径）。出于安全考量默认关闭')
+          .default(false),
+      }).description('资源设置'),
+    }),
   ])
 }
 
@@ -137,6 +145,14 @@ export const ConfigSchema = Schema.intersect([
       .description('显示详细日志（关闭后只输出关键信息）')
       .default(false),
   }).description('日志设置'),
+
+  Schema.object({
+    resource: Schema.object({
+      allowLocalResources: Schema.boolean()
+        .description('允许加载本地文件/图片资源（file:// 或本地路径）。出于安全考量默认关闭')
+        .default(false),
+    }).description('资源设置'),
+  }),
 ])
 
 export const name = 'multi-bot-controller-groupwelcome-message'

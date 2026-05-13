@@ -1,6 +1,6 @@
 // src/index.ts
 import { Context } from 'koishi'
-import { createConfig, updateBotIdOptions, SCHEMA_KEY_BOT_ID } from './config'
+import { updateBotIdOptions } from './config'
 import type { Config, BotConfig, WelcomeEventData, LeaveEventData } from './types'
 import { formatMessage, formatBatchMessage } from './messages'
 
@@ -25,7 +25,7 @@ export const usage = `
    - **固定窗口**：第一个事件触发后不再重置，延迟时间可预测
 3. 为每个 Bot 配置入群欢迎消息和退群消息：
    - **群组/频道 ID**：目标群组 ID
-   - **入群欢迎消息**：支持变量 {user} {id} {at} {avatar} {group} {group_id} {group_count} {time} {hitokoto} {br}
+   - **入群欢迎消息**：支持变量 {user} {id} {at} {avatar} {group} {group_id} {group_count} {time} {hitokoto} {br} {imageURL="..."}
    - **延迟发送时间**：0 表示立即发送，大于 0 表示等待该秒数后合并多条消息一起发送
    - **退群提醒消息**：同上
 
@@ -39,8 +39,9 @@ export const usage = `
 - {group_id} - 群组 ID
 - {group_count} - 群组人数
 - {time} - 当前时间
- - {hitokoto} - 一言
- - {br} - 换行
+- {hitokoto} - 一言
+- {br} - 换行
+- {imageURL="..."} - 插入图片，支持本地路径、file:// URL、http(s) URL（本地资源需在配置中启用）
 
 **退群消息特殊说明**：由于 OneBot 协议限制，退群事件不包含用户昵称。若消息中同时包含 \`{user}\` 和 \`{id}\`，插件会自动忽略 \`{user}\` 变量（避免显示为用户ID）。建议退群消息只使用 \`{id}\`。
 
@@ -54,6 +55,9 @@ export const usage = `
 **延迟模式对比（延迟 5 秒）：**
 - 滑动窗口：0s、2s、4s 各有一人加入 → 9s 发送合并消息（每次重置定时器）
 - 固定窗口：0s、2s、4s 各有一人加入 → 5s 发送合并消息（第一次触发后不重置）
+
+### v 1.0.1 版本更新说明
+- 新增了图片发送功能。
 `
 
 // 声明 Koishi 类型扩展
@@ -203,11 +207,11 @@ export function apply(ctx: Context, config: Config) {
       if (events.length === 1) {
         // 只有一个事件，使用单条消息格式化
         verboseLog(`[${botId}] Sending single welcome message for guild ${guildId}`)
-        message = await formatMessage(ctx, session, groupConfig.message)
+        message = await formatMessage(ctx, session, groupConfig.message, config.resource)
       } else {
         // 多个事件，使用批量消息格式化
         verboseLog(`[${botId}] Sending batch welcome message for guild ${guildId}, ${events.length} users`)
-        message = await formatBatchMessage(ctx, session, groupConfig.message, events, false)
+        message = await formatBatchMessage(ctx, session, groupConfig.message, events, false, config.resource)
       }
 
       await sendMessage(session, message)
@@ -240,11 +244,11 @@ export function apply(ctx: Context, config: Config) {
       if (events.length === 1) {
         // 只有一个事件，使用单条消息格式化
         verboseLog(`[${botId}] Sending single leave message for guild ${guildId}`)
-        message = await formatMessage(ctx, session, groupConfig.message)
+        message = await formatMessage(ctx, session, groupConfig.message, config.resource)
       } else {
         // 多个事件，使用批量消息格式化
         verboseLog(`[${botId}] Sending batch leave message for guild ${guildId}, ${events.length} users`)
-        message = await formatBatchMessage(ctx, session, groupConfig.message, events, true)
+        message = await formatBatchMessage(ctx, session, groupConfig.message, events, true, config.resource)
       }
 
       await sendMessage(session, message)
@@ -266,7 +270,8 @@ export function apply(ctx: Context, config: Config) {
 
     const scanFromMBC = () => {
       try {
-        const mbcService = ctx['multi-bot-controller']
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mbcService = (ctx as any)['multi-bot-controller']
         if (!mbcService) {
           logger.warn('multi-bot-controller service not available')
           return
@@ -301,7 +306,7 @@ export function apply(ctx: Context, config: Config) {
     }
 
     // 立即扫描一次
-    const scanTimer = setTimeout(() => scanFromMBC(), 500)
+    setTimeout(() => scanFromMBC(), 500)
 
     // 监听事件
     ctx.on('multi-bot-controller/bots-updated', () => scheduleScan())
@@ -315,6 +320,14 @@ export function apply(ctx: Context, config: Config) {
   ctx.on('guild-member-added', async (session) => {
     // 在事件入口就记录详细信息
     verboseLog(`[EVENT] guild-member-added - selfId: ${session.selfId}, platform: ${session.platform}, guild: ${session.guildId}, user: ${session.userId}`)
+
+    const guildId = session.guildId
+    const userId = session.userId
+
+    if (!guildId || !userId) {
+      verboseLog(`[EVENT] guild-member-added missing guildId or userId`)
+      return
+    }
 
     const botId = getBotId(session.platform || '', session.selfId || '')
     const botConfig = getBotConfig(botId)
@@ -334,30 +347,30 @@ export function apply(ctx: Context, config: Config) {
     }
 
     // 检查群组配置
-    const groupConfig = botConfig.welcomeMessages.find(m => m.guildId === session.guildId)
+    const groupConfig = botConfig.welcomeMessages.find(m => m.guildId === guildId)
     if (!groupConfig) {
-      verboseLog(`[${botId}] No welcome config for guild ${session.guildId}`)
+      verboseLog(`[${botId}] No welcome config for guild ${guildId}`)
       return
     }
 
     if (!groupConfig.message) {
-      verboseLog(`[${botId}] Welcome config exists for guild ${session.guildId} but message is empty`)
+      verboseLog(`[${botId}] Welcome config exists for guild ${guildId} but message is empty`)
       return
     }
 
     // 收集事件数据
     const eventData: WelcomeEventData = {
-      userId: session.userId,
+      userId,
       userName: await getUserName(session),
       timestamp: Date.now(),
     }
 
     // 检查是否启用延迟发送
     if (groupConfig.delaySeconds > 0) {
-      verboseLog(`[${botId}] Delay enabled for guild ${session.guildId}, waiting ${groupConfig.delaySeconds}s`)
+      verboseLog(`[${botId}] Delay enabled for guild ${guildId}, waiting ${groupConfig.delaySeconds}s`)
 
       // 使用复合 key 确保每个 bot 的队列独立
-      const key = getDelayKey(botId, session.guildId)
+      const key = getDelayKey(botId, guildId)
 
       // 检查是否已有待发送的队列
       const existing = delayManager.welcome.get(key)
@@ -371,13 +384,13 @@ export function apply(ctx: Context, config: Config) {
         if (botConfig.delayMode === 'sliding') {
           // 滑动窗口：取消旧定时器，重新开始计时
           clearTimeout(existing.timer)
-          existing.timer = setTimeout(() => processDelayedWelcome(botId, session.guildId), groupConfig.delaySeconds * 1000)
+          existing.timer = setTimeout(() => processDelayedWelcome(botId, guildId), groupConfig.delaySeconds * 1000)
           debugLog(`[${botId}] Sliding mode: timer reset`)
         }
         // fixed 模式：不重置定时器，保持原有的发送时间
       } else {
         // 创建新的延迟队列
-        const timer = setTimeout(() => processDelayedWelcome(botId, session.guildId), groupConfig.delaySeconds * 1000)
+        const timer = setTimeout(() => processDelayedWelcome(botId, guildId), groupConfig.delaySeconds * 1000)
         delayManager.welcome.set(key, {
           events: [eventData],
           timer,
@@ -390,9 +403,9 @@ export function apply(ctx: Context, config: Config) {
     } else {
       // 不启用延迟，立即发送
       try {
-        const message = await formatMessage(ctx, session, groupConfig.message)
+        const message = await formatMessage(ctx, session, groupConfig.message, config.resource)
         await sendMessage(session, message)
-        logger.info(`[${botId}] Welcome message sent for guild ${session.guildId}`)
+        logger.info(`[${botId}] Welcome message sent for guild ${guildId}`)
         verboseLog(`[${botId}] Message content: ${groupConfig.message}`)
       } catch (error) {
         logger.error(`[${botId}] Failed to send welcome message:`, error)
@@ -403,6 +416,14 @@ export function apply(ctx: Context, config: Config) {
   ctx.on('guild-member-removed', async (session) => {
     // 在事件入口就记录详细信息
     verboseLog(`[EVENT] guild-member-removed - selfId: ${session.selfId}, platform: ${session.platform}, guild: ${session.guildId}, user: ${session.userId}`)
+
+    const guildId = session.guildId
+    const userId = session.userId
+
+    if (!guildId || !userId) {
+      verboseLog(`[EVENT] guild-member-removed missing guildId or userId`)
+      return
+    }
 
     const botId = getBotId(session.platform || '', session.selfId || '')
     const botConfig = getBotConfig(botId)
@@ -422,30 +443,30 @@ export function apply(ctx: Context, config: Config) {
     }
 
     // 检查群组配置
-    const groupConfig = botConfig.leaveMessages.find(m => m.guildId === session.guildId)
+    const groupConfig = botConfig.leaveMessages.find(m => m.guildId === guildId)
     if (!groupConfig) {
-      verboseLog(`[${botId}] No leave config for guild ${session.guildId}`)
+      verboseLog(`[${botId}] No leave config for guild ${guildId}`)
       return
     }
 
     if (!groupConfig.message) {
-      verboseLog(`[${botId}] Leave config exists for guild ${session.guildId} but message is empty`)
+      verboseLog(`[${botId}] Leave config exists for guild ${guildId} but message is empty`)
       return
     }
 
     // 收集事件数据
     const eventData: LeaveEventData = {
-      userId: session.userId,
+      userId,
       userName: await getUserName(session),
       timestamp: Date.now(),
     }
 
     // 检查是否启用延迟发送
     if (groupConfig.delaySeconds > 0) {
-      verboseLog(`[${botId}] Delay enabled for guild ${session.guildId}, waiting ${groupConfig.delaySeconds}s`)
+      verboseLog(`[${botId}] Delay enabled for guild ${guildId}, waiting ${groupConfig.delaySeconds}s`)
 
       // 使用复合 key 确保每个 bot 的队列独立
-      const key = getDelayKey(botId, session.guildId)
+      const key = getDelayKey(botId, guildId)
 
       // 检查是否已有待发送的队列
       const existing = delayManager.leave.get(key)
@@ -459,13 +480,13 @@ export function apply(ctx: Context, config: Config) {
         if (botConfig.delayMode === 'sliding') {
           // 滑动窗口：取消旧定时器，重新开始计时
           clearTimeout(existing.timer)
-          existing.timer = setTimeout(() => processDelayedLeave(botId, session.guildId), groupConfig.delaySeconds * 1000)
+          existing.timer = setTimeout(() => processDelayedLeave(botId, guildId), groupConfig.delaySeconds * 1000)
           debugLog(`[${botId}] Sliding mode: timer reset`)
         }
         // fixed 模式：不重置定时器，保持原有的发送时间
       } else {
         // 创建新的延迟队列
-        const timer = setTimeout(() => processDelayedLeave(botId, session.guildId), groupConfig.delaySeconds * 1000)
+        const timer = setTimeout(() => processDelayedLeave(botId, guildId), groupConfig.delaySeconds * 1000)
         delayManager.leave.set(key, {
           events: [eventData],
           timer,
@@ -473,14 +494,14 @@ export function apply(ctx: Context, config: Config) {
           botId,
           session,
         })
-        debugLog(`[${botId}] Created new delay queue for guild ${session.guildId}`)
+        debugLog(`[${botId}] Created new delay queue for guild ${guildId}`)
       }
     } else {
       // 不启用延迟，立即发送
       try {
-        const message = await formatMessage(ctx, session, groupConfig.message)
+        const message = await formatMessage(ctx, session, groupConfig.message, config.resource)
         await sendMessage(session, message)
-        logger.info(`[${botId}] Leave message sent for guild ${session.guildId}`)
+        logger.info(`[${botId}] Leave message sent for guild ${guildId}`)
         verboseLog(`[${botId}] Message content: ${groupConfig.message}`)
       } catch (error) {
         logger.error(`[${botId}] Failed to send leave message:`, error)

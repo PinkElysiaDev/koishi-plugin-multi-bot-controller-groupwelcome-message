@@ -25,11 +25,18 @@ export interface BotConfig {
   leaveMessages: LeaveMessageConfig[]      // 离开消息列表 (table 展示)
 }
 
+/** 资源访问配置 */
+export interface ResourceConfig {
+  /** 是否允许本地文件/图片资源（file:// 或本地路径），默认关闭以确保安全 */
+  allowLocalResources: boolean
+}
+
 /** 插件配置 */
 export interface Config {
   bots: BotConfig[]
   debug: boolean                          // 是否输出调试日志
   verboseLogging: boolean                  // 显示详细日志
+  resource: ResourceConfig                 // 资源访问配置
 }
 
 /** 单条入群事件数据（用于延迟发送） */
